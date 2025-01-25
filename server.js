@@ -4,15 +4,16 @@ const router = express.Router();
 const cors = require("cors");
 const nodemailer = require("nodemailer");
 
-// server used to send emails
+// Server setup
 const app = express();
-
 require("dotenv").config();
 app.use(cors());
 app.use(express.json());
 app.use("/", router);
-app.listen(5000, () => console.log("Server Running"));
 
+app.listen(5000, () => console.log("Server Running on Port 5000"));
+
+// Configure Nodemailer
 const contactEmail = nodemailer.createTransport({
   service: "gmail",
   auth: {
@@ -23,13 +24,13 @@ const contactEmail = nodemailer.createTransport({
 
 contactEmail.verify((error) => {
   if (error) {
-    console.log(error);
+    console.log("Error setting up email transporter:", error);
   } else {
-    console.log("Ready to Send");
+    console.log("Email transporter is ready to send emails.");
   }
 });
 
-// Contact route with validation middleware
+// Contact route with validation
 router.post(
   "/contact",
   [
@@ -47,7 +48,7 @@ router.post(
       .withMessage("Last name cannot exceed 50 characters"),
     body("email")
       .isEmail()
-      .withMessage("Valid email is required")
+      .withMessage("A valid email is required")
       .normalizeEmail(),
     body("message")
       .trim()
@@ -64,30 +65,42 @@ router.post(
     // Handle validation results
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+      return res.status(400).json({
+        errors: errors
+          .array()
+          .map((err) => ({ field: err.param, message: err.msg })),
+      });
     }
-    
+
     const name = `${req.body.firstName} ${req.body.lastName}`;
     const email = req.body.email;
     const message = req.body.message;
-    const phone = req.body.phone;
+    const phone = req.body.phone || "N/A";
 
     const mail = {
-      from: name,
-      to: "********@gmail.com",
-      subject: "Contact Form Submission - Portfolio",
-      html: `<p>Name: ${name}</p>
-             <p>Email: ${email}</p>
-             <p>Phone: ${phone || "N/A"}</p>
-             <p>Message: ${message}</p>`,
+      from: `"Portfolio Contact Form" <${process.env.USER_MAIL}>`, // Professional "from" email
+      to: process.env.USER_MAIL, // Your portfolio email
+      subject: "New Contact Form Submission - Portfolio",
+      html: `
+        <h2>Contact Form Submission</h2>
+        <p><strong>Name:</strong> ${name}</p>
+        <p><strong>Email:</strong> ${email}</p>
+        <p><strong>Phone:</strong> ${phone}</p>
+        <p><strong>Message:</strong></p>
+        <p>${message}</p>
+      `,
     };
 
     contactEmail.sendMail(mail, (error) => {
       if (error) {
-        res.json(error);
-      } else {
-        res.json({ code: 200, status: "Message Sent" });
+        console.error("Error sending email:", error);
+        return res
+          .status(500)
+          .json({
+            error: "Failed to send the message. Please try again later.",
+          });
       }
+      res.status(200).json({ code: 200, status: "Message Sent Successfully" });
     });
   }
 );
